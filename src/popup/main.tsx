@@ -24,6 +24,8 @@ const EXPORT_OPTIONS: Array<{ label: string; fileName: string; risks?: RiskLevel
 function emptyState(): ScanState {
   return {
     pageUrl: "",
+    scanScope: "",
+    scanId: "",
     platform: "",
     status: "idle",
     filterMode: "hide_high_risk_and_excluded",
@@ -77,6 +79,12 @@ function downloadCsv(results: JobScanResult[], fileName: string, risks?: RiskLev
   URL.revokeObjectURL(url);
 }
 
+function withScanFileName(baseName: string, state: ScanState): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const platform = state.platform || "unknown";
+  return baseName.replace(".csv", `-${platform}-${stamp}.csv`);
+}
+
 function stripHash(url = ""): string {
   try {
     const parsed = new URL(url);
@@ -93,7 +101,8 @@ function App() {
   const [error, setError] = useState("");
   const [currentTabUrl, setCurrentTabUrl] = useState("");
 
-  const isCurrentPageResult = hasSamePage(scanState.pageUrl, currentTabUrl);
+  const currentScope = buildScanScope(currentTabUrl);
+  const isCurrentPageResult = scanState.scanScope ? scanState.scanScope === currentScope : hasSamePage(scanState.pageUrl, currentTabUrl);
   const hasResults = scanState.results.length > 0 && isCurrentPageResult;
   const statusText = useMemo(() => {
     if (busy || scanState.status === "scanning") {
@@ -121,6 +130,23 @@ function App() {
       }
     }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!busy && scanState.status !== "scanning") {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      chrome.storage.local.get(STORAGE_KEY).then((stored) => {
+        const nextState = stored[STORAGE_KEY] as ScanState | undefined;
+        if (nextState && nextState.scanScope === buildScanScope(currentTabUrl)) {
+          setScanState(nextState);
+        }
+      }).catch(() => undefined);
+    }, 800);
+
+    return () => window.clearInterval(timer);
+  }, [busy, currentTabUrl, scanState.status]);
 
   async function runScan(type: "JDMF_SCAN_PAGE" | "JDMF_SCAN_CURRENT_AND_NEXT_TWO_PAGES" | "JDMF_SCAN_DETAIL_PAGE"): Promise<void> {
     setBusy(true);
@@ -205,6 +231,23 @@ function App() {
         {scanState.summary.review > 0 ? (
           <p className="mt-3 rounded-md bg-panel px-3 py-2 text-xs leading-5 text-muted">⚪ {scanState.summary.review} 个岗位需要点开人工复核。</p>
         ) : null}
+        {scanState.progress ? (
+          <div className="mt-3 rounded-md border border-slate-200 bg-white px-3 py-2">
+            <div className="flex items-center justify-between gap-3 text-xs text-muted">
+              <span className="font-medium text-ink">{scanState.progress.stage}</span>
+              <span>
+                {scanState.progress.current}/{scanState.progress.total}
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-ink transition-all"
+                style={{ width: `${progressPercent(scanState.progress.current, scanState.progress.total)}%` }}
+              />
+            </div>
+            {scanState.progress.detail ? <p className="mt-2 truncate text-xs text-muted">{scanState.progress.detail}</p> : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="border-t border-slate-100 px-4 py-4">
@@ -245,7 +288,7 @@ function App() {
                   setError("当前导出结果不是这个页面的扫描结果。请先重新扫描当前页。");
                   return;
                 }
-                downloadCsv(scanState.results, option.fileName, option.risks);
+                downloadCsv(scanState.results, withScanFileName(option.fileName, scanState), option.risks);
               }}
             >
               <span>{option.label}</span>
@@ -259,11 +302,30 @@ function App() {
         <section className="border-t border-red-100 bg-red-50 px-4 py-3 text-xs leading-5 text-red-700">{error || scanState.error}</section>
       )}
 
+      {scanState.warnings?.length ? (
+        <section className="border-t border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+          {scanState.warnings.slice(0, 3).map((warning) => (
+            <p key={warning}>{warning}</p>
+          ))}
+        </section>
+      ) : null}
+
       <footer className="border-t border-slate-100 px-4 py-3 text-[11px] leading-5 text-muted">
         本地规则判断，不调用 LLM API。列表页无法提取完整 JD 时，请打开详情页手动扫描。
       </footer>
     </main>
   );
+}
+
+function buildScanScope(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.hash = "";
+    parsed.searchParams.delete("current");
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
 }
 
 function hasSamePage(left = "", right = ""): boolean {
@@ -292,6 +354,13 @@ function Stat({ label, value }: { label: string; value: number }) {
       <div className="mt-1 text-[11px] text-muted">{label}</div>
     </div>
   );
+}
+
+function progressPercent(current: number, total: number): number {
+  if (!Number.isFinite(total) || total <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

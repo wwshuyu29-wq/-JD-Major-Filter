@@ -39,14 +39,25 @@ export interface ScanSummary {
   review: number;
 }
 
+export interface ScanProgress {
+  current: number;
+  total: number;
+  stage: string;
+  detail?: string;
+}
+
 export interface ScanState {
   pageUrl: string;
+  scanScope: string;
+  scanId: string;
   platform: string;
   status: ScanStatus;
   filterMode: FilterMode;
   summary: ScanSummary;
   results: JobScanResult[];
+  progress?: ScanProgress;
   error?: string;
+  warnings?: string[];
   updatedAt: string;
 }
 
