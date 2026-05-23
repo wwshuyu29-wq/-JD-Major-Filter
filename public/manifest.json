@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "JD Major Filter",
+  "description": "Scan campus product job descriptions and hide roles with high-risk STEM/CS major requirements.",
+  "version": "0.1.0",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JD Major Filter",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.bytedance.com/*",
+        "https://*.tencent.com/*",
+        "https://*.qq.com/*",
+        "https://*.xiaohongshu.com/*",
+        "https://*.xhslink.com/*"
+      ],
+      "js": ["content-loader.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*.js"],
+      "matches": [
+        "https://*.bytedance.com/*",
+        "https://*.tencent.com/*",
+        "https://*.qq.com/*",
+        "https://*.xiaohongshu.com/*",
+        "https://*.xhslink.com/*"
+      ]
+    }
+  ],
+  "host_permissions": [
+    "https://*.bytedance.com/*",
+    "https://*.tencent.com/*",
+    "https://*.qq.com/*",
+    "https://*.xiaohongshu.com/*",
+    "https://*.xhslink.com/*"
+  ],
+  "permissions": ["activeTab", "scripting", "storage", "tabs"]
+}
